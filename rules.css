@@ -1,4 +1,7 @@
 @import url('https://fonts.googleapis.com/css?family=Barrio');
+body {
+	text-align: center;
+}
 #TheEyes {
 	width: 50%; 
 	display: block; 
@@ -10,4 +13,32 @@
 	color: #FFFFFF;
 	text-align: center;
 	text-shadow: 0px 6px 3px black, -2px 0px 0px black, 2px 0px 0px black, 0px -2px 0px black,0px 2px 0px black;
+}
+.Post {
+	display: block;
+	margin-left: 30%;
+	margin-right: 30%;
+	margin-top: 20px;
+	min-width: 40%;
+	border: 5px ridge;
+	border-radius: 15px;
+}
+.TitleDiv{
+	display:inline;
+	text-align: center;
+}
+.PostTitle {
+	display:inline-block;
+	text-align: center;
+	margin-top: 10px;
+	padding-right: 10px;
+	padding-left: 10px;
+	border: 2px ridge;
+}
+.PostContent {
+	text-align: left;
+	text-indent: 10%;
+	overflow-wrap: break-word;
+	margin-left: 5%;
+	margin-right: 5%;
 }

@@ -76,6 +76,28 @@ a:hover {
   and (min-device-width: 320px) 
   and (max-device-width: 568px)
   and (-webkit-min-device-pixel-ratio: 2) {
+	
+	a {
+		padding: 10px;
+		
+		border: 24px ridge;
+		color: black;
+		font-family: "Cormorant SC", Times, serif;
+		font-weight: 800;
+		font-size: 48px;
+	}
+	a:visited {
+		border-color: #E6E6E6;
+	}
+	a:link {
+		border-color: #E6E6E6;
+	}
+	a:hover {
+		border-color: #888888;
+		padding-left: 25px;
+		padding-right: 25px;
+	}
+	
 	#TheEyes {
 		width: 95%; 
 		display: block; 

@@ -3,6 +3,26 @@
 body {
 	text-align: center;
 }
+a {
+	padding: 10px;
+	
+	border: 10px ridge;
+	color: black;
+	font-family: "Cormorant SC", Times, serif;
+	font-weight: 800;
+}
+a:visited {
+	border-color: #E6E6E6;
+}
+a:link {
+	border-color: #E6E6E6;
+}
+a:hover {
+	border-color: #888888;
+	padding-left: 25px;
+	padding-right: 25px;
+}
+
 #TheEyes {
 	width: 50%; 
 	display: block; 

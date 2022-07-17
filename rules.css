@@ -2,10 +2,14 @@
 
 body {
 	text-align: center;
+	background-image: url("Progress.png");
+	background-size: 100%;
+	background-repeat: repeat-y;
+	background-position: center;
 }
 a {
 	padding: 10px;
-	
+	background-color: #FFFFFF;
 	border: 10px ridge;
 	color: black;
 	font-family: "Cormorant SC", Times, serif;
@@ -43,6 +47,7 @@ a:hover {
 	border: 15px ridge;
 	border-color: #888888;
 	border-radius: 15px;
+	background-color: #FFFFFF;
 }
 .PostTitle {
 	font-size: 32px;

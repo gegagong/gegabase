@@ -3,7 +3,6 @@
 body {
 	text-align: center;
 }
-
 a {
 	padding: 10px;
 	
@@ -95,8 +94,6 @@ a:hover {
 	}
 	a:hover {
 		border-color: #888888;
-		padding-left: 25px;
-		padding-right: 25px;
 	}
 	
 	#TheEyes {

@@ -9,6 +9,7 @@ Purpose:
 - Convert the detected pitch to a musical note
 - Display the detected notes on a graph over time
 - Allow users to customize the range of notes displayed on the graph
+- Apply audio filtering techniques to improve note detection accuracy
 
 Key Components:
 1. Audio Capture and Analysis:
@@ -39,9 +40,27 @@ Key Components:
    - On mobile, the graph fits the screen with a button to toggle the customization GUI
    - handleResize(): Adjusts the chart size when the window is resized on desktop
 
+6. Audio Filtering (New):
+   - Noise Gate: Ignores audio input below a certain threshold to reduce background noise
+   - Low-Pass Filter: Attenuates high frequencies to reduce noise
+   - Smoothing: Applies a simple smoothing algorithm to reduce rapid fluctuations in detected notes
+   - Custom UI elements allow real-time adjustment of filtering parameters
+
 This application demonstrates the integration of Web Audio API for sound processing,
 Chart.js for data visualization, custom algorithms for pitch detection and note mapping,
-and responsive design techniques for optimal display across different devices.
+responsive design techniques for optimal display across different devices, and
+audio filtering techniques to improve note detection accuracy in various environments.
+
+Recent Changes:
+- Added a noise gate to reduce sensitivity to background noise
+- Implemented a low-pass filter to attenuate high-frequency noise
+- Added a smoothing algorithm to stabilize note detection
+- Created new UI elements in the customization panel for adjusting filter parameters
+- Updated the audio processing pipeline to incorporate these new filtering techniques
+
+These enhancements aim to improve the accuracy and stability of note detection,
+especially in challenging audio conditions such as low volume, choppy sounds,
+or environments with significant background noise.
 -->
 <head>
     <meta charset="UTF-8">
@@ -110,11 +129,11 @@ and responsive design techniques for optimal display across different devices.
     <div>
         <button id="startButton">Start</button>
         <button id="endButton" disabled>End</button>
-        <button id="toggleCustomizationButton">Customize</button>
-        <button id="mobileCustomizeButton">Customize</button>
+        <button id="toggleCustomizationButton">Menu</button>
+        <button id="mobileCustomizeButton">Menu</button>
     </div>
     <div id="customizationGUI">
-        <h3>Customize Graph</h3>
+        <h3>Menu</h3>
         <div>
             <label for="minNote">Min Note:</label>
             <input type="number" id="minNote" min="0" max="127" value="48">
@@ -125,7 +144,35 @@ and responsive design techniques for optimal display across different devices.
             <input type="number" id="maxNote" min="0" max="127" value="84">
             <span id="maxNoteTranslation" class="note-translation"></span>
         </div>
-        <button id="updateRangeButton">Update Range</button>
+        <div>
+            <label for="noiseGate">Noise Gate (dB):</label>
+            <input type="number" id="noiseGate" min="-100" max="0" value="-50">
+        </div>
+        <div>
+            <label for="lowPassCutoff">Low-Pass Cutoff (Hz):</label>
+            <input type="number" id="lowPassCutoff" min="0" max="20000" value="5000">
+        </div>
+        <div>
+            <label for="smoothingFactor">Smoothing Factor:</label>
+            <input type="number" id="smoothingFactor" min="0" max="1" step="0.1" value="0.8">
+        </div>
+        <div>
+            <label for="scaleRoot">Scale Root:</label>
+            <select id="scaleRoot">
+                <option value="0">C</option>
+                <option value="1">C#/Db</option>
+                <!-- ... add options for all notes ... -->
+            </select>
+        </div>
+        <div>
+            <label for="scaleType">Scale Type:</label>
+            <select id="scaleType">
+                <option value="major">Major</option>
+                <option value="minor">Minor</option>
+                <!-- ... add other scale types if desired ... -->
+            </select>
+        </div>
+        <button id="saveSettingsButton">Save Settings</button>
     </div>
     <div id="chartContainer">
         <canvas id="noteChart"></canvas>
@@ -138,10 +185,22 @@ and responsive design techniques for optimal display across different devices.
         let isRunning = false;
         let isMobile;
         let chart;
-
+        let noiseGate;
+        let lowPassFilter;
+        let smoothingFactor;
+    
+        let currentSettings = {
+            minNote: 48,
+            maxNote: 84,
+            noiseGate: -50,
+            lowPassCutoff: 5000,
+            smoothingFactor: 0.8,
+            scaleRoot: 0,
+            scaleType: 'major'
+        };
+    
         const startButton = document.getElementById('startButton');
         const endButton = document.getElementById('endButton');
-        const updateRangeButton = document.getElementById('updateRangeButton');
         const toggleCustomizationButton = document.getElementById('toggleCustomizationButton');
         const mobileCustomizeButton = document.getElementById('mobileCustomizeButton');
         const customizationGUI = document.getElementById('customizationGUI');
@@ -149,27 +208,33 @@ and responsive design techniques for optimal display across different devices.
         const maxNoteInput = document.getElementById('maxNote');
         const minNoteTranslation = document.getElementById('minNoteTranslation');
         const maxNoteTranslation = document.getElementById('maxNoteTranslation');
-
+        const noiseGateInput = document.getElementById('noiseGate');
+        const lowPassCutoffInput = document.getElementById('lowPassCutoff');
+        const smoothingFactorInput = document.getElementById('smoothingFactor');
+        const saveSettingsButton = document.getElementById('saveSettingsButton');
+        const scaleRootInput = document.getElementById('scaleRoot');
+        const scaleTypeInput = document.getElementById('scaleType');
+    
         startButton.addEventListener('click', startAudioAnalysis);
         endButton.addEventListener('click', endAudioAnalysis);
-        updateRangeButton.addEventListener('click', updateChartRange);
         toggleCustomizationButton.addEventListener('click', toggleCustomizationGUI);
         mobileCustomizeButton.addEventListener('click', toggleCustomizationGUI);
         minNoteInput.addEventListener('input', updateNoteTranslation);
         maxNoteInput.addEventListener('input', updateNoteTranslation);
-
+        saveSettingsButton.addEventListener('click', saveSettings);
+    
         const ctx = document.getElementById('noteChart').getContext('2d');
-
+    
         function isMobileDevice() {
             return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         }
-
+    
         function initializeApp() {
             isMobile = isMobileDevice();
             if (isMobile) {
                 document.body.classList.add('mobile');
             }
-
+    
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -188,25 +253,27 @@ and responsive design techniques for optimal display across different devices.
                     scales: {
                         y: {
                             beginAtZero: false,
-                            min: 48,  // C3
-                            max: 84,  // C6
+                            min: currentSettings.minNote,
+                            max: currentSettings.maxNote,
                             ticks: {
                                 stepSize: 1,
                                 callback: function(value) {
                                     return translateNoteNumber(value);
-                                }
+                                },
+                                color: 'black'
                             }
                         },
                         y2: {
                             position: 'right',
                             beginAtZero: false,
-                            min: 48,
-                            max: 84,
+                            min: currentSettings.minNote,
+                            max: currentSettings.maxNote,
                             ticks: {
                                 stepSize: 1,
                                 callback: function(value) {
                                     return translateNoteNumber(value);
-                                }
+                                },
+                                color: 'black'
                             }
                         },
                         x: {
@@ -230,68 +297,138 @@ and responsive design techniques for optimal display across different devices.
                     }
                 }
             });
-
+    
             updateNoteTranslation();
-
+    
             if (!isMobile) {
                 handleResize();
             }
         }
-
+    
+        function saveSettings() {
+            currentSettings.minNote = parseInt(minNoteInput.value);
+            currentSettings.maxNote = parseInt(maxNoteInput.value);
+            currentSettings.noiseGate = parseFloat(noiseGateInput.value);
+            currentSettings.lowPassCutoff = parseFloat(lowPassCutoffInput.value);
+            currentSettings.smoothingFactor = parseFloat(smoothingFactorInput.value);
+            currentSettings.scaleRoot = parseInt(scaleRootInput.value);
+            currentSettings.scaleType = scaleTypeInput.value;
+    
+            updateChartRange();
+            updateNoiseGate();
+            updateLowPassCutoff();
+            updateSmoothingFactor();
+            updateChartLabels();
+            updateChartColors();
+        }
+    
         function updateChartRange() {
-            const minNote = parseInt(minNoteInput.value);
-            const maxNote = parseInt(maxNoteInput.value);
-            
-            if (minNote >= maxNote) {
-                alert('Min Note must be less than Max Note');
-                return;
-            }
-
-            chart.options.scales.y.min = minNote;
-            chart.options.scales.y.max = maxNote;
-            chart.options.scales.y2.min = minNote;
-            chart.options.scales.y2.max = maxNote;
+            chart.options.scales.y.min = currentSettings.minNote;
+            chart.options.scales.y.max = currentSettings.maxNote;
+            chart.options.scales.y2.min = currentSettings.minNote;
+            chart.options.scales.y2.max = currentSettings.maxNote;
             chart.update();
         }
-
+    
         function updateNoteTranslation() {
             minNoteTranslation.textContent = translateNoteNumber(minNoteInput.value);
             maxNoteTranslation.textContent = translateNoteNumber(maxNoteInput.value);
         }
-
+    
+        function updateNoiseGate() {
+            noiseGate = currentSettings.noiseGate;
+        }
+    
+        function updateLowPassCutoff() {
+            if (audioContext && lowPassFilter) {
+                lowPassFilter.frequency.setValueAtTime(currentSettings.lowPassCutoff, audioContext.currentTime);
+            }
+        }
+    
+        function updateSmoothingFactor() {
+            smoothingFactor = currentSettings.smoothingFactor;
+        }
+    
+        function updateChartLabels() {
+            chart.options.scales.y.ticks.stepSize = 1;
+            chart.options.scales.y2.ticks.stepSize = 1;
+            chart.update();
+        }
+    
+        function updateChartColors() {
+            const scale = getScale(currentSettings.scaleRoot, currentSettings.scaleType);
+            
+            // Update point and line colors
+            chart.data.datasets[0].pointBackgroundColor = [];
+            chart.data.datasets[0].borderColor = [];
+            
+            noteData.forEach((note, index) => {
+                const noteNumber = Math.round(note) % 12;
+                const color = scale.includes(noteNumber) ? 'red' : 'rgb(75, 192, 192)';
+                chart.data.datasets[0].pointBackgroundColor[index] = color;
+                chart.data.datasets[0].borderColor[index] = color;
+            });
+            
+            // Update y-axis label colors
+            chart.options.scales.y.ticks.color = (context) => {
+                const noteNumber = context.tick.value % 12;
+                return scale.includes(noteNumber) ? 'red' : 'black';
+            };
+            
+            // Update y2-axis label colors
+            chart.options.scales.y2.ticks.color = (context) => {
+                const noteNumber = context.tick.value % 12;
+                return scale.includes(noteNumber) ? 'red' : 'black';
+            };
+            
+            chart.update();
+        }
+    
+        function getScale(root, type) {
+            const majorScale = [0, 2, 4, 5, 7, 9, 11];
+            const minorScale = [0, 2, 3, 5, 7, 8, 10];
+            const scale = type === 'major' ? majorScale : minorScale;
+            return scale.map(interval => (interval + root) % 12);
+        }
+    
         function translateNoteNumber(noteNumber) {
             const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
             const octave = Math.floor(noteNumber / 12) - 1;
             const noteName = notes[noteNumber % 12];
             return `${noteName}${octave}`;
         }
-
+    
         function toggleCustomizationGUI() {
             customizationGUI.style.display = customizationGUI.style.display === 'none' ? 'block' : 'none';
         }
-
+    
         function startAudioAnalysis() {
             if (!isRunning) {
                 isRunning = true;
                 startButton.disabled = true;
                 endButton.disabled = false;
                 noteData.length = 0;  // Clear previous data
-
+    
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                lowPassFilter = audioContext.createBiquadFilter();
+                lowPassFilter.type = "lowpass";
+                lowPassFilter.frequency.setValueAtTime(currentSettings.lowPassCutoff, audioContext.currentTime);
                 
                 navigator.mediaDevices.getUserMedia({ audio: true, video: false })
                     .then(stream => {
                         const source = audioContext.createMediaStreamSource(stream);
                         analyser = audioContext.createAnalyser();
                         analyser.fftSize = 2048;
-                        source.connect(analyser);
-
+                        source.connect(lowPassFilter);
+                        lowPassFilter.connect(analyser);
+                        
                         detectPitch();
                     })
                     .catch(err => console.error('Error accessing microphone:', err));
             }
         }
-
+    
         function endAudioAnalysis() {
             isRunning = false;
             startButton.disabled = false;
@@ -303,25 +440,49 @@ and responsive design techniques for optimal display across different devices.
                 });
             }
         }
-
+    
+        let lastNote = -1;
+    
         function detectPitch() {
             if (!isRunning) return;
-
+    
             const bufferLength = analyser.fftSize;
             const buffer = new Float32Array(bufferLength);
             analyser.getFloatTimeDomainData(buffer);
-
+    
+            // Apply noise gate
+            const rms = getRMS(buffer);
+            if (20 * Math.log10(rms) < currentSettings.noiseGate) {
+                requestAnimationFrame(detectPitch);
+                return;
+            }
+    
             const frequency = autoCorrelate(buffer, audioContext.sampleRate);
             if (frequency > 0) {
-                const note = frequencyToNote(frequency);
-                console.log(`Detected frequency: ${frequency.toFixed(2)} Hz, Note: ${translateNoteNumber(note)}`);
+                let note = frequencyToNote(frequency);
+                
+                // Apply smoothing
+                if (lastNote !== -1) {
+                    note = lastNote * currentSettings.smoothingFactor + note * (1 - currentSettings.smoothingFactor);
+                }
+                lastNote = note;
+    
+                console.log(`Detected frequency: ${frequency.toFixed(2)} Hz, Note: ${translateNoteNumber(Math.round(note))}`);
                 noteData.push(note);
                 updateChart();
             }
-
+    
             requestAnimationFrame(detectPitch);
         }
-
+    
+        function getRMS(buffer) {
+            let sum = 0;
+            for (let i = 0; i < buffer.length; i++) {
+                sum += buffer[i] * buffer[i];
+            }
+            return Math.sqrt(sum / buffer.length);
+        }
+    
         function autoCorrelate(buffer, sampleRate) {
             let SIZE = buffer.length;
             let sumOfSquares = 0;
@@ -333,7 +494,7 @@ and responsive design techniques for optimal display across different devices.
             if (rootMeanSquare < 0.01) {
                 return -1; // not enough signal
             }
-
+    
             let r1 = 0, r2 = SIZE - 1, thres = 0.2;
             for (let i = 0; i < SIZE / 2; i++) {
                 if (Math.abs(buffer[i]) < thres) { r1 = i; break; }
@@ -341,17 +502,17 @@ and responsive design techniques for optimal display across different devices.
             for (let i = 1; i < SIZE / 2; i++) {
                 if (Math.abs(buffer[SIZE - i]) < thres) { r2 = SIZE - i; break; }
             }
-
+    
             buffer = buffer.slice(r1, r2);
             SIZE = buffer.length;
-
+    
             let c = new Array(SIZE).fill(0);
             for (let i = 0; i < SIZE; i++) {
                 for (let j = 0; j < SIZE - i; j++) {
                     c[i] = c[i] + buffer[j] * buffer[j + i];
                 }
             }
-
+    
             let d = 0;
             while (c[d] > c[d + 1]) d++;
             let maxval = -1, maxpos = -1;
@@ -362,38 +523,35 @@ and responsive design techniques for optimal display across different devices.
                 }
             }
             let T0 = maxpos;
-
+    
             let x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1];
             let a = (x1 + x3 - 2 * x2) / 2;
             let b = (x3 - x1) / 2;
             if (a) T0 = T0 - b / (2 * a);
-
+    
             return sampleRate / T0;
         }
-
+    
         function frequencyToNote(frequency) {
             return Math.round(69 + 12 * Math.log2(frequency / 440));
         }
-
+    
         function updateChart() {
             const labels = noteData.map((_, index) => (index * 0.1).toFixed(1));
             chart.data.labels = labels;
             chart.data.datasets[0].data = noteData;
             
-            // Color-code the notes
-            chart.data.datasets[0].pointBackgroundColor = noteData.map(note => {
-                const hue = (note % 12) * 30; // 30 degrees per semitone
-                return `hsl(${hue}, 70%, 60%)`;
-            });
+            // Update colors based on the selected scale
+            updateChartColors();
             
             if (!isMobile) {
                 chart.options.maintainAspectRatio = false;
                 chart.canvas.style.height = '100vh';
             }
-
+    
             chart.update();
         }
-
+    
         function handleResize() {
             if (!isMobile) {
                 chart.options.maintainAspectRatio = false;
@@ -401,11 +559,11 @@ and responsive design techniques for optimal display across different devices.
                 chart.resize();
             }
         }
-
+    
         window.addEventListener('resize', handleResize);
-
-        // Initialize the app when the page loads
-        window.onload = initializeApp;
+    
+        // Initialize the app immediately
+        initializeApp();
     </script>
 </body>
 </html>

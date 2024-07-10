@@ -1,19 +1,108 @@
 <!DOCTYPE html>
 <html lang="en">
+<!--
+This HTML document creates a web application for real-time musical note detection and visualization.
+
+Purpose:
+- Capture audio input from the user's microphone
+- Detect the pitch of the audio in real-time
+- Convert the detected pitch to a musical note
+- Display the detected notes on a graph over time
+- Allow users to customize the range of notes displayed on the graph
+
+Key Components:
+1. Audio Capture and Analysis:
+   - startAudioAnalysis(): Initializes audio context and starts the note detection process
+   - endAudioAnalysis(): Stops the audio analysis
+   - detectPitch(): Continuously analyzes the audio input to detect pitches
+
+2. Pitch Detection and Note Conversion:
+   - autoCorrelate(): Implements the autocorrelation algorithm for pitch detection
+   - frequencyToNote(): Converts a frequency in Hz to a MIDI note number
+
+3. Visualization:
+   - initializeApp(): Sets up the Chart.js graph for note visualization
+   - updateChart(): Updates the graph with newly detected notes
+   - The graph includes note labels on both left and right y-axes
+   - Notes are color-coded for easier identification
+
+4. User Interface and Customization:
+   - updateChartRange(): Updates the y-axis range of the graph based on user input
+   - translateNoteNumber(): Converts a MIDI note number to a musical note name
+   - toggleCustomizationGUI(): Shows/hides the customization interface
+   - The interface is responsive, adapting to various screen sizes including mobile devices
+
+5. Responsive Design:
+   - isMobileDevice(): Detects if the user is on a mobile device
+   - Applies different styles and behaviors for mobile and desktop devices
+   - On desktop, the graph fits the full screen
+   - On mobile, the graph fits the screen with a button to toggle the customization GUI
+   - handleResize(): Adjusts the chart size when the window is resized on desktop
+
+This application demonstrates the integration of Web Audio API for sound processing,
+Chart.js for data visualization, custom algorithms for pitch detection and note mapping,
+and responsive design techniques for optimal display across different devices.
+-->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Note Detection App</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
         #chartContainer {
-            width: 80%;
-            margin: 20px auto;
+            width: 100%;
+            height: 100vh;
+            max-width: none;
+            margin: 0;
+        }
+        .mobile #chartContainer {
+            height: calc(100vh - 60px); /* Adjust for mobile header */
         }
         button {
             font-size: 16px;
             margin: 10px;
             padding: 5px 10px;
+        }
+        #customizationGUI {
+            margin: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            display: none;
+        }
+        .mobile #customizationGUI {
+            position: fixed;
+            top: 60px;
+            left: 0;
+            right: 0;
+            background: white;
+            z-index: 1000;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        #customizationGUI label {
+            display: inline-block;
+            width: 100px;
+        }
+        .note-translation {
+            margin-left: 10px;
+            font-style: italic;
+        }
+        #mobileCustomizeButton {
+            display: none;
+        }
+        .mobile #mobileCustomizeButton {
+            display: inline-block;
+        }
+        .mobile #toggleCustomizationButton {
+            display: none;
         }
     </style>
 </head>
@@ -21,6 +110,22 @@
     <div>
         <button id="startButton">Start</button>
         <button id="endButton" disabled>End</button>
+        <button id="toggleCustomizationButton">Customize</button>
+        <button id="mobileCustomizeButton">Customize</button>
+    </div>
+    <div id="customizationGUI">
+        <h3>Customize Graph</h3>
+        <div>
+            <label for="minNote">Min Note:</label>
+            <input type="number" id="minNote" min="0" max="127" value="48">
+            <span id="minNoteTranslation" class="note-translation"></span>
+        </div>
+        <div>
+            <label for="maxNote">Max Note:</label>
+            <input type="number" id="maxNote" min="0" max="127" value="84">
+            <span id="maxNoteTranslation" class="note-translation"></span>
+        </div>
+        <button id="updateRangeButton">Update Range</button>
     </div>
     <div id="chartContainer">
         <canvas id="noteChart"></canvas>
@@ -31,16 +136,40 @@
         let analyser;
         const noteData = [];
         let isRunning = false;
+        let isMobile;
+        let chart;
 
         const startButton = document.getElementById('startButton');
         const endButton = document.getElementById('endButton');
+        const updateRangeButton = document.getElementById('updateRangeButton');
+        const toggleCustomizationButton = document.getElementById('toggleCustomizationButton');
+        const mobileCustomizeButton = document.getElementById('mobileCustomizeButton');
+        const customizationGUI = document.getElementById('customizationGUI');
+        const minNoteInput = document.getElementById('minNote');
+        const maxNoteInput = document.getElementById('maxNote');
+        const minNoteTranslation = document.getElementById('minNoteTranslation');
+        const maxNoteTranslation = document.getElementById('maxNoteTranslation');
+
         startButton.addEventListener('click', startAudioAnalysis);
         endButton.addEventListener('click', endAudioAnalysis);
+        updateRangeButton.addEventListener('click', updateChartRange);
+        toggleCustomizationButton.addEventListener('click', toggleCustomizationGUI);
+        mobileCustomizeButton.addEventListener('click', toggleCustomizationGUI);
+        minNoteInput.addEventListener('input', updateNoteTranslation);
+        maxNoteInput.addEventListener('input', updateNoteTranslation);
 
         const ctx = document.getElementById('noteChart').getContext('2d');
-        let chart;
+
+        function isMobileDevice() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
 
         function initializeApp() {
+            isMobile = isMobileDevice();
+            if (isMobile) {
+                document.body.classList.add('mobile');
+            }
+
             chart = new Chart(ctx, {
                 type: 'line',
                 data: {
@@ -54,6 +183,8 @@
                     }]
                 },
                 options: {
+                    responsive: true,
+                    maintainAspectRatio: !isMobile,
                     scales: {
                         y: {
                             beginAtZero: false,
@@ -62,8 +193,19 @@
                             ticks: {
                                 stepSize: 1,
                                 callback: function(value) {
-                                    const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-                                    return notes[value % 12] + Math.floor(value / 12);
+                                    return translateNoteNumber(value);
+                                }
+                            }
+                        },
+                        y2: {
+                            position: 'right',
+                            beginAtZero: false,
+                            min: 48,
+                            max: 84,
+                            ticks: {
+                                stepSize: 1,
+                                callback: function(value) {
+                                    return translateNoteNumber(value);
                                 }
                             }
                         },
@@ -88,6 +230,44 @@
                     }
                 }
             });
+
+            updateNoteTranslation();
+
+            if (!isMobile) {
+                handleResize();
+            }
+        }
+
+        function updateChartRange() {
+            const minNote = parseInt(minNoteInput.value);
+            const maxNote = parseInt(maxNoteInput.value);
+            
+            if (minNote >= maxNote) {
+                alert('Min Note must be less than Max Note');
+                return;
+            }
+
+            chart.options.scales.y.min = minNote;
+            chart.options.scales.y.max = maxNote;
+            chart.options.scales.y2.min = minNote;
+            chart.options.scales.y2.max = maxNote;
+            chart.update();
+        }
+
+        function updateNoteTranslation() {
+            minNoteTranslation.textContent = translateNoteNumber(minNoteInput.value);
+            maxNoteTranslation.textContent = translateNoteNumber(maxNoteInput.value);
+        }
+
+        function translateNoteNumber(noteNumber) {
+            const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+            const octave = Math.floor(noteNumber / 12) - 1;
+            const noteName = notes[noteNumber % 12];
+            return `${noteName}${octave}`;
+        }
+
+        function toggleCustomizationGUI() {
+            customizationGUI.style.display = customizationGUI.style.display === 'none' ? 'block' : 'none';
         }
 
         function startAudioAnalysis() {
@@ -134,7 +314,7 @@
             const frequency = autoCorrelate(buffer, audioContext.sampleRate);
             if (frequency > 0) {
                 const note = frequencyToNote(frequency);
-                console.log(`Detected frequency: ${frequency.toFixed(2)} Hz, Note: ${note}`);
+                console.log(`Detected frequency: ${frequency.toFixed(2)} Hz, Note: ${translateNoteNumber(note)}`);
                 noteData.push(note);
                 updateChart();
             }
@@ -199,8 +379,30 @@
             const labels = noteData.map((_, index) => (index * 0.1).toFixed(1));
             chart.data.labels = labels;
             chart.data.datasets[0].data = noteData;
+            
+            // Color-code the notes
+            chart.data.datasets[0].pointBackgroundColor = noteData.map(note => {
+                const hue = (note % 12) * 30; // 30 degrees per semitone
+                return `hsl(${hue}, 70%, 60%)`;
+            });
+            
+            if (!isMobile) {
+                chart.options.maintainAspectRatio = false;
+                chart.canvas.style.height = '100vh';
+            }
+
             chart.update();
         }
+
+        function handleResize() {
+            if (!isMobile) {
+                chart.options.maintainAspectRatio = false;
+                chart.canvas.style.height = '100vh';
+                chart.resize();
+            }
+        }
+
+        window.addEventListener('resize', handleResize);
 
         // Initialize the app when the page loads
         window.onload = initializeApp;

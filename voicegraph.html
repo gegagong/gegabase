@@ -4,63 +4,82 @@
 This HTML document creates a web application for real-time musical note detection and visualization.
 
 Purpose:
-- Capture audio input from the user's microphone
-- Detect the pitch of the audio in real-time
-- Convert the detected pitch to a musical note
-- Display the detected notes on a graph over time
-- Allow users to customize the range of notes displayed on the graph
-- Apply audio filtering techniques to improve note detection accuracy
+The application captures audio input from the user's microphone, detects the pitch in real-time, 
+converts the detected pitch to a musical note, and displays these notes on an interactive graph. 
+It allows users to customize various aspects of the detection and visualization process, 
+applies audio filtering techniques to improve accuracy, and highlights notes based on musical scales.
 
-Key Components:
+Key Components and Functionality:
+
 1. Audio Capture and Analysis:
-   - startAudioAnalysis(): Initializes audio context and starts the note detection process
-   - endAudioAnalysis(): Stops the audio analysis
-   - detectPitch(): Continuously analyzes the audio input to detect pitches
+   - Initializes audio context and manages the audio analysis process
+   - Implements real-time pitch detection using autocorrelation algorithm
+   - Converts detected frequencies to MIDI note numbers and musical note names
 
-2. Pitch Detection and Note Conversion:
-   - autoCorrelate(): Implements the autocorrelation algorithm for pitch detection
-   - frequencyToNote(): Converts a frequency in Hz to a MIDI note number
+2. Visualization:
+   - Utilizes Chart.js to create a dynamic graph of detected notes over time
+   - Displays note labels on both left and right y-axes for easy reading
+   - Color-codes notes based on their inclusion in the selected musical scale (red for in-scale, black for out-of-scale)
+   - Allows customization of the displayed note range
 
-3. Visualization:
-   - initializeApp(): Sets up the Chart.js graph for note visualization
-   - updateChart(): Updates the graph with newly detected notes
-   - The graph includes note labels on both left and right y-axes
-   - Notes are color-coded for easier identification
+3. User Interface and Customization:
+   - Provides a responsive interface adaptable to various screen sizes, including mobile devices
+   - Allows users to adjust the range of displayed notes
+   - Enables selection of a root note and scale type (major/minor) for note highlighting
+   - Offers real-time adjustment of audio filtering parameters
 
-4. User Interface and Customization:
-   - updateChartRange(): Updates the y-axis range of the graph based on user input
-   - translateNoteNumber(): Converts a MIDI note number to a musical note name
-   - toggleCustomizationGUI(): Shows/hides the customization interface
-   - The interface is responsive, adapting to various screen sizes including mobile devices
+4. Audio Filtering and Processing:
+   - Implements a noise gate to reduce sensitivity to background noise
+   - Applies a low-pass filter to attenuate high-frequency noise
+   - Uses a smoothing algorithm to stabilize note detection and reduce fluctuations
 
-5. Responsive Design:
-   - isMobileDevice(): Detects if the user is on a mobile device
-   - Applies different styles and behaviors for mobile and desktop devices
-   - On desktop, the graph fits the full screen
-   - On mobile, the graph fits the screen with a button to toggle the customization GUI
-   - handleResize(): Adjusts the chart size when the window is resized on desktop
+5. Musical Scale Integration:
+   - Generates major and minor scales based on a user-selected root note
+   - Dynamically updates the chart to highlight notes belonging to the selected scale
+   - Enhances musical relevance of the visualization for educational and practice purposes
 
-6. Audio Filtering (New):
-   - Noise Gate: Ignores audio input below a certain threshold to reduce background noise
-   - Low-Pass Filter: Attenuates high frequencies to reduce noise
-   - Smoothing: Applies a simple smoothing algorithm to reduce rapid fluctuations in detected notes
-   - Custom UI elements allow real-time adjustment of filtering parameters
+6. Responsive Design:
+   - Adapts the interface and functionality for both desktop and mobile devices
+   - Implements a full-screen graph on desktop and a toggle-able customization menu on mobile
+   - Handles window resize events to maintain optimal display
+   
+7. Mobile Responsiveness:
+   - Implements a toggle-able customization menu specifically for mobile devices
+   - Adjusts chart height and layout for optimal viewing on smaller screens
 
-This application demonstrates the integration of Web Audio API for sound processing,
-Chart.js for data visualization, custom algorithms for pitch detection and note mapping,
-responsive design techniques for optimal display across different devices, and
-audio filtering techniques to improve note detection accuracy in various environments.
+8. Real-time Settings Adjustment:
+   - Allows users to modify parameters such as note range, audio filtering, and scale selection on-the-fly
+   - Immediately updates the visualization to reflect changed settings without restarting the audio analysis
 
-Recent Changes:
-- Added a noise gate to reduce sensitivity to background noise
-- Implemented a low-pass filter to attenuate high-frequency noise
-- Added a smoothing algorithm to stabilize note detection
-- Created new UI elements in the customization panel for adjusting filter parameters
-- Updated the audio processing pipeline to incorporate these new filtering techniques
+9. Enhanced Visualization:
+   - Utilizes dual y-axis labeling (left and right) for improved note readability
+   - Implements dynamic color-coding of both plotted points and y-axis labels based on the selected musical scale
 
-These enhancements aim to improve the accuracy and stability of note detection,
-especially in challenging audio conditions such as low volume, choppy sounds,
-or environments with significant background noise.
+10. Advanced Audio Processing:
+    - Employs a weighted average smoothing algorithm to reduce note fluctuations and improve stability
+    - Provides fine-grained control over noise gate, low-pass filter, and smoothing factor
+
+11. Extensive Chart.js Customization:
+    - Tailors the Chart.js library to create a specialized musical note visualization
+    - Implements custom callbacks for dynamic color changes and note labeling
+
+These additional features enhance the application's usability, responsiveness, and overall effectiveness 
+as a tool for real-time musical note detection and visualization across various devices and use cases.
+
+Technical Implementation:
+- Utilizes Web Audio API for audio processing and analysis
+- Employs Chart.js for data visualization
+- Implements custom algorithms for pitch detection, note mapping, and scale generation
+- Uses responsive design techniques for cross-device compatibility
+
+This application serves as a tool for musicians, music students, and anyone interested in pitch 
+recognition and musical scale study. It provides real-time feedback on sung or played notes, 
+helping users improve their pitch accuracy and understand the relationship between notes in 
+different musical scales.
+
+The combination of audio analysis, dynamic visualization, and musical theory integration 
+makes this a versatile application for music education, practice, and exploration of pitch 
+and scale relationships in a visual and interactive manner.
 -->
 <head>
     <meta charset="UTF-8">
@@ -89,6 +108,10 @@ or environments with significant background noise.
             font-size: 16px;
             margin: 10px;
             padding: 5px 10px;
+        }
+        .button-container {
+            display: flex;
+            justify-content: space-between;
         }
         #customizationGUI {
             margin: 20px;
@@ -133,7 +156,7 @@ or environments with significant background noise.
         <button id="mobileCustomizeButton">Menu</button>
     </div>
     <div id="customizationGUI">
-        <h3>Menu</h3>
+        <h3 style="text-align: center;">Menu</h3>
         <div>
             <label for="minNote">Min Note:</label>
             <input type="number" id="minNote" min="0" max="127" value="48">
@@ -161,7 +184,16 @@ or environments with significant background noise.
             <select id="scaleRoot">
                 <option value="0">C</option>
                 <option value="1">C#/Db</option>
-                <!-- ... add options for all notes ... -->
+                <option value="2">D</option>
+                <option value="3">D#/Eb</option>
+                <option value="4">E</option>
+                <option value="5">F</option>
+                <option value="6">F#/Gb</option>
+                <option value="7">G</option>
+                <option value="8">G#/Ab</option>
+                <option value="9">A</option>
+                <option value="10">A#/Bb</option>
+                <option value="11">B</option>
             </select>
         </div>
         <div>
@@ -172,7 +204,10 @@ or environments with significant background noise.
                 <!-- ... add other scale types if desired ... -->
             </select>
         </div>
-        <button id="saveSettingsButton">Save Settings</button>
+        <div class="button-container">
+            <button id="clearGraphButton">Clear Graph</button>
+            <button id="saveSettingsButton">Save Settings</button>
+        </div>
     </div>
     <div id="chartContainer">
         <canvas id="noteChart"></canvas>
@@ -188,6 +223,7 @@ or environments with significant background noise.
         let noiseGate;
         let lowPassFilter;
         let smoothingFactor;
+        let mediaStream = null;
     
         let currentSettings = {
             minNote: 48,
@@ -204,6 +240,7 @@ or environments with significant background noise.
         const toggleCustomizationButton = document.getElementById('toggleCustomizationButton');
         const mobileCustomizeButton = document.getElementById('mobileCustomizeButton');
         const customizationGUI = document.getElementById('customizationGUI');
+        const clearGraphButton = document.getElementById('clearGraphButton');
         const minNoteInput = document.getElementById('minNote');
         const maxNoteInput = document.getElementById('maxNote');
         const minNoteTranslation = document.getElementById('minNoteTranslation');
@@ -217,6 +254,7 @@ or environments with significant background noise.
     
         startButton.addEventListener('click', startAudioAnalysis);
         endButton.addEventListener('click', endAudioAnalysis);
+        clearGraphButton.addEventListener('click', clearGraph);
         toggleCustomizationButton.addEventListener('click', toggleCustomizationGUI);
         mobileCustomizeButton.addEventListener('click', toggleCustomizationGUI);
         minNoteInput.addEventListener('input', updateNoteTranslation);
@@ -228,7 +266,7 @@ or environments with significant background noise.
         function isMobileDevice() {
             return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         }
-    
+        
         function initializeApp() {
             isMobile = isMobileDevice();
             if (isMobile) {
@@ -242,7 +280,20 @@ or environments with significant background noise.
                     datasets: [{
                         label: 'Detected Note',
                         data: [],
-                        borderColor: 'rgb(75, 192, 192)',
+                        borderColor: function(context) {
+                            const index = context.dataIndex;
+                            const value = context.dataset.data[index];
+                            const noteNumber = Math.round(value) % 12;
+                            const scale = getScale(currentSettings.scaleRoot, currentSettings.scaleType);
+                            return scale.includes(noteNumber) ? 'red' : 'black';
+                        },
+                        pointBackgroundColor: function(context) {
+                            const index = context.dataIndex;
+                            const value = context.dataset.data[index];
+                            const noteNumber = Math.round(value) % 12;
+                            const scale = getScale(currentSettings.scaleRoot, currentSettings.scaleType);
+                            return scale.includes(noteNumber) ? 'red' : 'black';
+                        },
                         tension: 0.1,
                         pointRadius: 3
                     }]
@@ -297,14 +348,22 @@ or environments with significant background noise.
                     }
                 }
             });
-    
+            
+            scaleRootInput.value = currentSettings.scaleRoot;
             updateNoteTranslation();
     
             if (!isMobile) {
                 handleResize();
             }
         }
-    
+        
+        function clearGraph() {
+            noteData.length = 0;  // Clear the data array
+            chart.data.labels = [];  // Clear labels
+            chart.data.datasets[0].data = [];  // Clear dataset
+            chart.update();  // Update the chart
+        }
+
         function saveSettings() {
             currentSettings.minNote = parseInt(minNoteInput.value);
             currentSettings.maxNote = parseInt(maxNoteInput.value);
@@ -318,6 +377,7 @@ or environments with significant background noise.
             updateNoiseGate();
             updateLowPassCutoff();
             updateSmoothingFactor();
+            updateScaleRoot();
             updateChartLabels();
             updateChartColors();
         }
@@ -327,6 +387,11 @@ or environments with significant background noise.
             chart.options.scales.y.max = currentSettings.maxNote;
             chart.options.scales.y2.min = currentSettings.minNote;
             chart.options.scales.y2.max = currentSettings.maxNote;
+
+            chart.options.scales.y.ticks.stepSize = 1;
+            chart.options.scales.y.ticks.autoSkip = false;
+            chart.options.scales.y2.ticks.stepSize = 1;
+            chart.options.scales.y2.ticks.autoSkip = false;
             chart.update();
         }
     
@@ -350,35 +415,46 @@ or environments with significant background noise.
         }
     
         function updateChartLabels() {
-            chart.options.scales.y.ticks.stepSize = 1;
-            chart.options.scales.y2.ticks.stepSize = 1;
+            chart.options.scales.y.ticks = {
+                stepSize: 1,
+                callback: function(value) {
+                    return translateNoteNumber(value);
+                }
+            };
+            chart.options.scales.y2.ticks = {
+                stepSize: 1,
+                callback: function(value) {
+                    return translateNoteNumber(value);
+                }
+            };
             chart.update();
         }
     
         function updateChartColors() {
             const scale = getScale(currentSettings.scaleRoot, currentSettings.scaleType);
             
-            // Update point and line colors
-            chart.data.datasets[0].pointBackgroundColor = [];
-            chart.data.datasets[0].borderColor = [];
-            
-            noteData.forEach((note, index) => {
+            function isInScale(note) {
                 const noteNumber = Math.round(note) % 12;
-                const color = scale.includes(noteNumber) ? 'red' : 'rgb(75, 192, 192)';
-                chart.data.datasets[0].pointBackgroundColor[index] = color;
-                chart.data.datasets[0].borderColor[index] = color;
-            });
-            
-            // Update y-axis label colors
-            chart.options.scales.y.ticks.color = (context) => {
-                const noteNumber = context.tick.value % 12;
-                return scale.includes(noteNumber) ? 'red' : 'black';
+                return scale.includes(noteNumber);
+            }
+
+            chart.data.datasets[0].pointBackgroundColor = function(context) {
+                const value = context.dataset.data[context.dataIndex];
+                return isInScale(value) ? 'red' : 'black';
             };
             
-            // Update y2-axis label colors
-            chart.options.scales.y2.ticks.color = (context) => {
-                const noteNumber = context.tick.value % 12;
-                return scale.includes(noteNumber) ? 'red' : 'black';
+            chart.data.datasets[0].borderColor = function(context) {
+                const value = context.dataset.data[context.dataIndex];
+                return isInScale(value) ? 'red' : 'black';
+            };
+
+            // Update y-axis and y2-axis label colors
+            chart.options.scales.y.ticks.color = function(context) {
+                return isInScale(context.tick.value) ? 'red' : 'black';
+            };
+
+            chart.options.scales.y2.ticks.color = function(context) {
+                return isInScale(context.tick.value) ? 'red' : 'black';
             };
             
             chart.update();
@@ -399,7 +475,11 @@ or environments with significant background noise.
         }
     
         function toggleCustomizationGUI() {
-            customizationGUI.style.display = customizationGUI.style.display === 'none' ? 'block' : 'none';
+            if (customizationGUI.style.display === 'none' || customizationGUI.style.display === '') {
+                customizationGUI.style.display = 'block';
+            } else {
+                customizationGUI.style.display = 'none';
+            }
         }
     
         function startAudioAnalysis() {
@@ -438,6 +518,11 @@ or environments with significant background noise.
                     audioContext = null;
                     analyser = null;
                 });
+            }
+            
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
             }
         }
     
@@ -533,7 +618,7 @@ or environments with significant background noise.
         }
     
         function frequencyToNote(frequency) {
-            return Math.round(69 + 12 * Math.log2(frequency / 440));
+            return 69 + 12 * Math.log2(frequency / 440);
         }
     
         function updateChart() {
@@ -541,15 +626,17 @@ or environments with significant background noise.
             chart.data.labels = labels;
             chart.data.datasets[0].data = noteData;
             
-            // Update colors based on the selected scale
-            updateChartColors();
-            
             if (!isMobile) {
                 chart.options.maintainAspectRatio = false;
                 chart.canvas.style.height = '100vh';
             }
     
             chart.update();
+        }
+
+        function updateScaleRoot() {
+            currentSettings.scaleRoot = parseInt(scaleRootInput.value);
+            updateChartColors();
         }
     
         function handleResize() {
